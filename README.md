@@ -14,6 +14,9 @@ A visual library/media organization app built with Godot 4. Organize your conten
 - 🔍 **Search** - Quickly filter items
 - 📐 **Three Layouts** - Grid, List, or Large Grid view
 - 💾 **Auto-Save** - All changes saved automatically
+- 🎨 Custom Color Picker - RGB sliders for any color
+- 🏷️ Tag System - Organize and filter by tags
+- 💾 Export/Import - Backup and restore your library
 
 ## 🚀 Quick Start
 
