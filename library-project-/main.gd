@@ -6,6 +6,11 @@ var layout_button = null
 var add_button = null
 var search_box = null
 var search_text = ""
+var current_menu = null
+var export_button = null
+var import_button = null
+var tag_filter_box = null
+var active_tag_filter = ""
 
 var library_data = {
 	"root": {
@@ -38,6 +43,30 @@ func _ready():
 	search_box.size = Vector2(200, 50)
 	search_box.text_changed.connect(_on_search_changed)
 	add_child(search_box)
+	
+	# Export button
+	export_button = Button.new()
+	export_button.text = "Export"
+	export_button.position = Vector2(580, 20)
+	export_button.size = Vector2(100, 50)
+	add_child(export_button)
+	export_button.pressed.connect(_on_export_pressed)
+	
+	# Import button
+	import_button = Button.new()
+	import_button.text = "Import"
+	import_button.position = Vector2(700, 20)
+	import_button.size = Vector2(100, 50)
+	add_child(import_button)
+	import_button.pressed.connect(_on_import_pressed)
+	
+	# Tag filter box
+	tag_filter_box = LineEdit.new()
+	tag_filter_box.placeholder_text = "Filter by tag..."
+	tag_filter_box.position = Vector2(820, 20)
+	tag_filter_box.size = Vector2(200, 50)
+	tag_filter_box.text_changed.connect(_on_tag_filter_changed)
+	add_child(tag_filter_box)
 	
 	show_level("root")
 
@@ -75,8 +104,22 @@ func show_level(level_name):
 	
 	if library_data[level_name].has("children"):
 		for child_name in library_data[level_name]["children"]:
-			if search_text == "" or search_text in child_name.to_lower():
-				create_button(child_name, false, layout_type)
+			# Filter by search text
+			if search_text != "" and not search_text in child_name.to_lower():
+				continue
+			
+			# Filter by tag
+			if active_tag_filter != "":
+				var item_tags = library_data.get(child_name, {}).get("tags", [])
+				var has_tag = false
+				for tag in item_tags:
+					if active_tag_filter.to_lower() in tag.to_lower():
+						has_tag = true
+						break
+				if not has_tag:
+					continue
+			
+			create_button(child_name, false, layout_type)
 
 func create_button(button_text, is_back_button, layout_type):
 	var container = VBoxContainer.new()
@@ -153,7 +196,7 @@ func create_button(button_text, is_back_button, layout_type):
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		btn.add_child(label)
 	
-	# Three dots - FIXED
+	# Three dots menu
 	var dots_container = Control.new()
 	dots_container.size = Vector2(35, 35)
 	dots_container.position = Vector2(block_width - 40, 5)
@@ -177,7 +220,7 @@ func create_button(button_text, is_back_button, layout_type):
 		)
 		btn.add_child(dots_container)
 		
-		# Show/hide dots - SIMPLE VERSION
+		# Show/hide dots on hover
 		btn.mouse_entered.connect(func(): dots_container.visible = true)
 		btn.mouse_exited.connect(func(): dots_container.visible = false)
 		dots_container.mouse_entered.connect(func(): dots_container.visible = true)
@@ -210,14 +253,23 @@ func create_button(button_text, is_back_button, layout_type):
 	button_container.add_child(container)
 
 func _show_edit_menu(item_name, origin):
+	# Close any existing menu
+	if current_menu != null:
+		current_menu.queue_free()
+	
 	var popup = Window.new()
 	popup.title = ""
-	popup.size = Vector2(180, 140)
+	popup.size = Vector2(180, 250)
 	popup.unresizable = true
 	popup.borderless = false
 	popup.transient = true
 	popup.exclusive = false
-	popup.close_requested.connect(func(): popup.queue_free())
+	popup.close_requested.connect(func(): 
+		popup.queue_free()
+		current_menu = null
+	)
+	
+	current_menu = popup
 	
 	var global_pos = origin.global_position
 	popup.position = Vector2i(global_pos.x + 40, global_pos.y)
@@ -226,24 +278,62 @@ func _show_edit_menu(item_name, origin):
 	vbox.add_theme_constant_override("separation", 8)
 	vbox.position = Vector2(10, 10)
 	
+	# Edit Name
 	var edit_btn = Button.new()
 	edit_btn.text = "Edit Name"
 	edit_btn.custom_minimum_size = Vector2(160, 35)
 	edit_btn.pressed.connect(func():
 		popup.queue_free()
+		current_menu = null
 		_edit_name_dialog(item_name)
 	)
 	vbox.add_child(edit_btn)
 	
+	# Add Image
 	var image_btn = Button.new()
 	image_btn.text = "Add Image/Video"
 	image_btn.custom_minimum_size = Vector2(160, 35)
 	image_btn.pressed.connect(func():
 		popup.queue_free()
+		current_menu = null
 		_add_image_dialog(item_name)
 	)
 	vbox.add_child(image_btn)
 	
+	# Remove Image (NEW)
+	var remove_image_btn = Button.new()
+	remove_image_btn.text = "Remove Image"
+	remove_image_btn.custom_minimum_size = Vector2(160, 35)
+	remove_image_btn.pressed.connect(func():
+		popup.queue_free()
+		current_menu = null
+		_remove_image(item_name)
+	)
+	vbox.add_child(remove_image_btn)
+	
+	# Change Color (NEW - Color Picker)
+	var color_btn = Button.new()
+	color_btn.text = "Change Color"
+	color_btn.custom_minimum_size = Vector2(160, 35)
+	color_btn.pressed.connect(func():
+		popup.queue_free()
+		current_menu = null
+		_color_picker_dialog(item_name)
+	)
+	vbox.add_child(color_btn)
+	
+	# Manage Tags (NEW)
+	var tags_btn = Button.new()
+	tags_btn.text = "Manage Tags"
+	tags_btn.custom_minimum_size = Vector2(160, 35)
+	tags_btn.pressed.connect(func():
+		popup.queue_free()
+		current_menu = null
+		_manage_tags_dialog(item_name)
+	)
+	vbox.add_child(tags_btn)
+	
+	# Delete (RED)
 	var delete_btn = Button.new()
 	delete_btn.text = "Delete"
 	delete_btn.custom_minimum_size = Vector2(160, 35)
@@ -257,6 +347,7 @@ func _show_edit_menu(item_name, origin):
 	delete_btn.add_theme_color_override("font_color", Color.WHITE)
 	delete_btn.pressed.connect(func():
 		popup.queue_free()
+		current_menu = null
 		_on_delete_pressed(item_name)
 	)
 	vbox.add_child(delete_btn)
@@ -329,6 +420,242 @@ func _add_image_dialog(item_name):
 	add_child(file_dialog)
 	file_dialog.popup_centered()
 
+func _remove_image(item_name):
+	library_data[item_name]["image_path"] = ""
+	save_library()
+	var current_level = "root" if navigation_stack.size() == 0 else navigation_stack[-1]
+	show_level(current_level)
+
+func _color_picker_dialog(item_name):
+	var dialog = Window.new()
+	dialog.title = "Pick Color"
+	dialog.size = Vector2(350, 280)
+	dialog.position = get_viewport().size / 2 - dialog.size / 2
+	dialog.close_requested.connect(func(): dialog.queue_free())
+	
+	var vbox = VBoxContainer.new()
+	vbox.position = Vector2(20, 40)
+	vbox.add_theme_constant_override("separation", 15)
+	
+	var current_color = library_data[item_name].get("bg_color", Color(0.4, 0.5, 0.7))
+	
+	# Preview panel
+	var preview = Panel.new()
+	preview.custom_minimum_size = Vector2(310, 60)
+	var preview_style = StyleBoxFlat.new()
+	preview_style.bg_color = current_color
+	preview.add_theme_stylebox_override("panel", preview_style)
+	vbox.add_child(preview)
+	
+	# Red slider
+	var r_container = HBoxContainer.new()
+	var r_label = Label.new()
+	r_label.text = "R:"
+	r_label.custom_minimum_size = Vector2(30, 20)
+	r_container.add_child(r_label)
+	var r_slider = HSlider.new()
+	r_slider.min_value = 0
+	r_slider.max_value = 1
+	r_slider.step = 0.01
+	r_slider.value = current_color.r
+	r_slider.custom_minimum_size = Vector2(250, 20)
+	r_container.add_child(r_slider)
+	vbox.add_child(r_container)
+	
+	# Green slider
+	var g_container = HBoxContainer.new()
+	var g_label = Label.new()
+	g_label.text = "G:"
+	g_label.custom_minimum_size = Vector2(30, 20)
+	g_container.add_child(g_label)
+	var g_slider = HSlider.new()
+	g_slider.min_value = 0
+	g_slider.max_value = 1
+	g_slider.step = 0.01
+	g_slider.value = current_color.g
+	g_slider.custom_minimum_size = Vector2(250, 20)
+	g_container.add_child(g_slider)
+	vbox.add_child(g_container)
+	
+	# Blue slider
+	var b_container = HBoxContainer.new()
+	var b_label = Label.new()
+	b_label.text = "B:"
+	b_label.custom_minimum_size = Vector2(30, 20)
+	b_container.add_child(b_label)
+	var b_slider = HSlider.new()
+	b_slider.min_value = 0
+	b_slider.max_value = 1
+	b_slider.step = 0.01
+	b_slider.value = current_color.b
+	b_slider.custom_minimum_size = Vector2(250, 20)
+	b_container.add_child(b_slider)
+	vbox.add_child(b_container)
+	
+	# Update preview on slider change
+	var update_preview = func():
+		var new_color = Color(r_slider.value, g_slider.value, b_slider.value)
+		preview_style.bg_color = new_color
+	
+	r_slider.value_changed.connect(func(_val): update_preview.call())
+	g_slider.value_changed.connect(func(_val): update_preview.call())
+	b_slider.value_changed.connect(func(_val): update_preview.call())
+	
+	# Buttons
+	var btn_container = HBoxContainer.new()
+	btn_container.add_theme_constant_override("separation", 10)
+	
+	var save_btn = Button.new()
+	save_btn.text = "Save"
+	save_btn.custom_minimum_size = Vector2(150, 35)
+	save_btn.pressed.connect(func():
+		var new_color = Color(r_slider.value, g_slider.value, b_slider.value)
+		library_data[item_name]["bg_color"] = new_color
+		save_library()
+		var current_level = "root" if navigation_stack.size() == 0 else navigation_stack[-1]
+		show_level(current_level)
+		dialog.queue_free()
+	)
+	btn_container.add_child(save_btn)
+	
+	var cancel_btn = Button.new()
+	cancel_btn.text = "Cancel"
+	cancel_btn.custom_minimum_size = Vector2(150, 35)
+	cancel_btn.pressed.connect(func(): dialog.queue_free())
+	btn_container.add_child(cancel_btn)
+	
+	vbox.add_child(btn_container)
+	dialog.add_child(vbox)
+	add_child(dialog)
+	dialog.popup()
+
+func _manage_tags_dialog(item_name):
+	var dialog = Window.new()
+	dialog.title = "Manage Tags"
+	dialog.size = Vector2(350, 300)
+	dialog.position = get_viewport().size / 2 - dialog.size / 2
+	dialog.close_requested.connect(func(): dialog.queue_free())
+	
+	var vbox = VBoxContainer.new()
+	vbox.position = Vector2(20, 40)
+	vbox.add_theme_constant_override("separation", 10)
+	
+	var label = Label.new()
+	label.text = "Tags (comma separated):"
+	vbox.add_child(label)
+	
+	# Get current tags
+	var current_tags = library_data[item_name].get("tags", [])
+	var tags_text = ", ".join(current_tags)
+	
+	var input = TextEdit.new()
+	input.text = tags_text
+	input.custom_minimum_size = Vector2(310, 100)
+	vbox.add_child(input)
+	
+	var info_label = Label.new()
+	info_label.text = "Example: game, rpg, favorite"
+	info_label.add_theme_font_size_override("font_size", 10)
+	vbox.add_child(info_label)
+	
+	var btn_container = HBoxContainer.new()
+	btn_container.add_theme_constant_override("separation", 10)
+	
+	var save_btn = Button.new()
+	save_btn.text = "Save"
+	save_btn.custom_minimum_size = Vector2(150, 35)
+	save_btn.pressed.connect(func():
+		var tags_string = input.text.strip_edges()
+		var tags_array = []
+		if tags_string != "":
+			for tag in tags_string.split(","):
+				var clean_tag = tag.strip_edges()
+				if clean_tag != "":
+					tags_array.append(clean_tag)
+		library_data[item_name]["tags"] = tags_array
+		save_library()
+		dialog.queue_free()
+	)
+	btn_container.add_child(save_btn)
+	
+	var cancel_btn = Button.new()
+	cancel_btn.text = "Cancel"
+	cancel_btn.custom_minimum_size = Vector2(150, 35)
+	cancel_btn.pressed.connect(func(): dialog.queue_free())
+	btn_container.add_child(cancel_btn)
+	
+	vbox.add_child(btn_container)
+	dialog.add_child(vbox)
+	add_child(dialog)
+	dialog.popup()
+
+func _on_export_pressed():
+	var file_dialog = FileDialog.new()
+	file_dialog.title = "Export Library"
+	file_dialog.size = Vector2(600, 400)
+	file_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	file_dialog.filters = ["*.json ; JSON Files"]
+	
+	file_dialog.file_selected.connect(func(path):
+		var save_data = {}
+		for key in library_data:
+			var item = library_data[key].duplicate(true)
+			if item.has("bg_color") and item["bg_color"] is Color:
+				var color = item["bg_color"]
+				item["bg_color"] = {"r": color.r, "g": color.g, "b": color.b, "a": color.a}
+			save_data[key] = item
+		
+		var export_file = FileAccess.open(path, FileAccess.WRITE)
+		if export_file:
+			export_file.store_string(JSON.stringify(save_data, "\t"))
+			export_file.close()
+			print("Library exported to: " + path)
+		file_dialog.queue_free()
+	)
+	
+	file_dialog.canceled.connect(func(): file_dialog.queue_free())
+	
+	add_child(file_dialog)
+	file_dialog.popup_centered()
+
+func _on_import_pressed():
+	var file_dialog = FileDialog.new()
+	file_dialog.title = "Import Library"
+	file_dialog.size = Vector2(600, 400)
+	file_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	file_dialog.filters = ["*.json ; JSON Files"]
+	
+	file_dialog.file_selected.connect(func(path):
+		var import_file = FileAccess.open(path, FileAccess.READ)
+		if import_file:
+			var json = JSON.new()
+			if json.parse(import_file.get_as_text()) == OK:
+				library_data = json.data
+				# Convert color dictionaries back to Color objects
+				for key in library_data:
+					if library_data[key].has("bg_color") and library_data[key]["bg_color"] is Dictionary:
+						var c = library_data[key]["bg_color"]
+						library_data[key]["bg_color"] = Color(c.get("r", 0.4), c.get("g", 0.5), c.get("b", 0.7), c.get("a", 1.0))
+				save_library()
+				show_level("root")
+				navigation_stack.clear()
+				print("Library imported from: " + path)
+			import_file.close()
+		file_dialog.queue_free()
+	)
+	
+	file_dialog.canceled.connect(func(): file_dialog.queue_free())
+	
+	add_child(file_dialog)
+	file_dialog.popup_centered()
+
+func _on_tag_filter_changed(new_text):
+	active_tag_filter = new_text.strip_edges()
+	var current_level = "root" if navigation_stack.size() == 0 else navigation_stack[-1]
+	show_level(current_level)
+
 func _rename_item(old_name, new_name):
 	if new_name == "" or new_name == old_name:
 		return
@@ -376,7 +703,8 @@ func _on_add_button_pressed():
 		"children": [],
 		"layout": "grid",
 		"display_text": new_item_name,
-		"bg_color": Color(0.4, 0.5, 0.7)
+		"bg_color": Color(0.4, 0.5, 0.7),
+		"tags": []
 	}
 	save_library()
 	show_level(current_level)
